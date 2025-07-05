@@ -2,7 +2,7 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 import { config } from 'dotenv';
 import { MessageHandler } from './handlers/messageHandler.js';
-import { SchedulerService } from './services/schedulerService.js';
+import { SchedulerService } from './services/SchedulerService.js';
 import { logger } from './utils/logger.js';
 
 config();
