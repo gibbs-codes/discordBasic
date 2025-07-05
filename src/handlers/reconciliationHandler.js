@@ -1,5 +1,5 @@
 // src/handlers/reconciliationHandler.js - Reconciliation Integration
-import { ReconciliationService } from '../services/reconciliationService.js';
+import { ReconciliationService } from '../services/ReconciliationService.js';
 import { LLMService } from '../services/llm/LLMService.js';
 import { ChannelHandler } from './channelHandler.js';
 import { logger } from '../utils/logger.js';

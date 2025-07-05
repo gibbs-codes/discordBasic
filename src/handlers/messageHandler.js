@@ -2,7 +2,7 @@
 import { ChannelHandler } from './channelHandler.js';
 import { ReconciliationHandler } from './reconciliationHandler.js';
 import { LLMService } from '../services/llm/LLMService.js';
-import { MemoryService } from '../services/memoryService.js';
+import { MemoryService } from '../services/MemoryService.js';
 import { logger } from '../utils/logger.js';
 
 export class MessageHandler {
