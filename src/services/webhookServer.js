@@ -10,7 +10,7 @@ export class WebhookServer {
     this.discordClient = discordClient;
     this.llmService = new LLMService();
     this.channelHandler = new ChannelHandler();
-    this.port = process.env.WEBHOOK_PORT || 3001;
+    this.port = process.env.WEBHOOK_PORT || 3004;
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -36,13 +36,41 @@ export class WebhookServer {
   setupRoutes() {
     // Health check endpoint
     this.app.get('/health', (req, res) => {
-      res.json({
+        res.json({
         status: 'healthy',
         service: 'discord-coach-bot',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        discord: this.discordClient?.isReady() ? 'connected' : 'disconnected'
-      });
+        discord: this.discordClient?.isReady() || false,
+        port: this.port,
+        environment: process.env.NODE_ENV || 'development'
+        });
+    });
+
+  // Status endpoint for detailed monitoring
+    this.app.get('/status', (req, res) => {
+        res.json({
+        service: 'accountability-discord-bot',
+        status: 'running',
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        discord: {
+            connected: !!this.discordClient?.isReady(),
+            guilds: this.discordClient?.guilds?.cache?.size || 0,
+            user: this.discordClient?.user?.tag || 'Not connected'
+        },
+        webhook: {
+            port: this.port,
+            endpoints: ['/health', '/status', '/webhook/reconciliation']
+        },
+        llm: {
+            provider: process.env.LLM_PROVIDER || 'not configured',
+            model: process.env.LLM_MODEL || 'not configured'
+        },
+        mongodb: {
+            configured: !!process.env.MONGO_URI
+        }
+        });
     });
 
     // Main reconciliation webhook endpoint
@@ -307,7 +335,7 @@ export class WebhookServer {
           reject(err);
         } else {
           logger.info(`🌐 Webhook server listening on port ${this.port}`);
-          logger.info(`📡 Reconciliation endpoint: http://localhost:${this.port}/reconciliation`);
+          logger.info(`📡 Reconciliation endpoint: ${process.env.RECONCILIATION_API_URL}`);
           resolve();
         }
       });

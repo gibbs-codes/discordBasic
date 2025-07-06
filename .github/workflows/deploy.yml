@@ -112,22 +112,18 @@ jobs:
         if curl -f http://localhost:3004/health; then
           echo "✅ Discord Bot deployment successful!"
         else
-          echo "⚠️  Health endpoint not responding, checking process..."
-          docker exec accountability-discord-bot-production pgrep -f "node.*bot.js" && echo "✅ Bot process is running"
+          echo "❌ Health check failed"
+          echo "Container logs:"
+          docker logs accountability-discord-bot-production
+          exit 1
         fi
         
         echo "Testing status endpoint..."
-        curl -s http://localhost:3004/status | head -20 || echo "Status endpoint not available"
+        curl -s http://localhost:3004/status | jq '.' || curl -s http://localhost:3004/status
         
-        echo "Checking Discord bot logs..."
-        docker logs accountability-discord-bot-production | tail -10
-        
-        echo "Testing network connectivity to other services..."
-        if docker exec accountability-discord-bot-production ping -c 1 ctaaapi-production 2>/dev/null; then
-          echo "✅ Can reach CTAAAPI from Discord Bot!"
-        else
-          echo "⚠️  Cannot reach CTAAAPI (this may be expected)"
-        fi
+        echo "Checking Discord connection..."
+        sleep 5
+        docker logs accountability-discord-bot-production | grep "ready to dominate" && echo "✅ Discord connected"
         
     - name: Clean up old images
       run: |
