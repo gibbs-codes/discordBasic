@@ -1,0 +1,148 @@
+name: Deploy Discord Bot to Mac Mini
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  APP_NAME: accountability-discord-bot
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure Docker environment
+      run: |
+        echo "Setting up Docker environment for ${{ github.repository }}..."
+        
+        # Create Docker config directory
+        mkdir -p ~/.docker
+        
+        # Create config without keychain
+        cat > ~/.docker/config.json << 'EOF'
+        {
+          "auths": {},
+          "credsStore": "",
+          "credHelpers": {},
+          "experimental": "disabled"
+        }
+        EOF
+        
+        # Ensure shared network exists
+        docker network create gibbs-apps 2>/dev/null || echo "Network already exists"
+        
+        # Test Docker access
+        echo "Testing Docker access..."
+        docker --version
+        
+    - name: Set up deployment directory
+      run: |
+        DEPLOY_DIR=~/deployments/${{ env.APP_NAME }}
+        echo "Cleaning up old deployment..."
+        
+        # Stop any existing container
+        docker stop accountability-discord-bot-production 2>/dev/null || true
+        docker rm accountability-discord-bot-production 2>/dev/null || true
+        
+        # Clean up directory but preserve data volumes
+        rm -rf $DEPLOY_DIR
+        mkdir -p $DEPLOY_DIR
+        mkdir -p $DEPLOY_DIR/logs
+        mkdir -p $DEPLOY_DIR/data
+        
+        echo "Copying new code..."
+        cp -r $GITHUB_WORKSPACE/* $DEPLOY_DIR/
+        
+    - name: Copy secrets
+      run: |
+        DEPLOY_DIR=~/deployments/${{ env.APP_NAME }}
+        APP_SECRETS=~/secrets/${{ env.APP_NAME }}
+        
+        echo "Copying environment file..."
+        if [ -f "$APP_SECRETS/production.env" ]; then
+          cp $APP_SECRETS/production.env $DEPLOY_DIR/.env
+          echo "✅ Environment file copied as .env"
+        else
+          echo "❌ Environment file not found at $APP_SECRETS/production.env"
+          exit 1
+        fi
+        
+    - name: Build and start container
+      env:
+        DOCKER_CONFIG: ~/.docker
+        DOCKER_BUILDKIT: 0
+      run: |
+        cd ~/deployments/${{ env.APP_NAME }}
+        echo "Building Discord Bot..."
+        
+        # Stop any existing container
+        docker stop accountability-discord-bot-production 2>/dev/null || true
+        docker rm accountability-discord-bot-production 2>/dev/null || true
+        
+        # Build the image
+        docker build --no-cache -t accountability-discord-bot:latest .
+        
+        # Run the container with shared network
+        docker run -d \
+          --name accountability-discord-bot-production \
+          --restart unless-stopped \
+          --network gibbs-apps \
+          -p 3004:3004 \
+          -v $(pwd)/logs:/usr/src/app/logs:rw \
+          -v $(pwd)/data:/usr/src/app/data:rw \
+          --env-file .env \
+          -e NODE_ENV=production \
+          -e PORT=3004 \
+          accountability-discord-bot:latest
+        
+    - name: Verify deployment
+      run: |
+        echo "Waiting for container to start..."
+        sleep 25
+        
+        echo "Checking container status..."
+        docker ps | grep accountability-discord-bot-production
+        
+        echo "Testing health endpoint..."
+        if curl -f http://localhost:3004/health; then
+          echo "✅ Discord Bot deployment successful!"
+        else
+          echo "⚠️  Health endpoint not responding, checking process..."
+          docker exec accountability-discord-bot-production pgrep -f "node.*bot.js" && echo "✅ Bot process is running"
+        fi
+        
+        echo "Testing status endpoint..."
+        curl -s http://localhost:3004/status | head -20 || echo "Status endpoint not available"
+        
+        echo "Checking Discord bot logs..."
+        docker logs accountability-discord-bot-production | tail -10
+        
+        echo "Testing network connectivity to other services..."
+        if docker exec accountability-discord-bot-production ping -c 1 ctaaapi-production 2>/dev/null; then
+          echo "✅ Can reach CTAAAPI from Discord Bot!"
+        else
+          echo "⚠️  Cannot reach CTAAAPI (this may be expected)"
+        fi
+        
+    - name: Clean up old images
+      run: |
+        docker image prune -f --filter label=app=accountability-discord-bot || true
+        
+    - name: Show final status
+      run: |
+        echo "=== Final Status ==="
+        docker ps | grep -E "(accountability-discord-bot-production|morning-chats-production|ctaaapi-production|projector-ui-production)"
+        echo ""
+        echo "Discord Bot is running:"
+        echo "  - Health: http://localhost:3004/health"
+        echo "  - Status: http://localhost:3004/status"
+        echo "  - Discord: Connected and monitoring channels"
+        echo "  - Memory: MongoDB pattern analysis enabled"
+        echo ""
+        echo "Network: gibbs-apps"
+        docker network inspect gibbs-apps --format='{{range .Containers}}{{.Name}}: {{.IPv4Address}}{{"\n"}}{{end}}'

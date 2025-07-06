@@ -1,0 +1,31 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: accountability-discord-bot-production
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - gibbs-apps
+    volumes:
+      # Persist logs and any data
+      - ./logs:/usr/src/app/logs:rw
+      - ./data:/usr/src/app/data:rw
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "node.*bot.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "app=accountability-discord-bot"
+      - "environment=production"
+
+networks:
+  gibbs-apps:
+    external: true

@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { config } from 'dotenv';
 import { MessageHandler } from './handlers/messageHandler.js';
 import { SchedulerService } from './services/SchedulerService.js';
+import { WebhookServer } from './services/webhookServer.js';
 import { logger } from './utils/logger.js';
 
 config();
@@ -20,14 +21,20 @@ class AccountabilityBot {
 
     this.messageHandler = new MessageHandler();
     this.scheduler = new SchedulerService();
+    this.webhookServer = new WebhookServer(this.client);
     
     this.setupEventListeners();
   }
 
   setupEventListeners() {
-    this.client.once('ready', () => {
+    this.client.once('ready', async () => {
       logger.info(`🤖 ${this.client.user.tag} is online and ready to dominate!`);
+      
+      // Start services
       this.scheduler.startReconciliationSchedule(this.client);
+      await this.webhookServer.start();
+      
+      logger.info('✅ All services started successfully');
     });
 
     this.client.on('messageCreate', async (message) => {
@@ -54,6 +61,19 @@ class AccountabilityBot {
       process.exit(1);
     }
   }
+
+  async shutdown() {
+    logger.info('🛑 Shutting down bot...');
+    
+    // Stop services
+    this.scheduler.stopScheduler();
+    await this.webhookServer.stop();
+    
+    // Logout from Discord
+    await this.client.destroy();
+    
+    logger.info('✅ Bot shutdown complete');
+  }
 }
 
 // Error handling
@@ -61,11 +81,21 @@ process.on('unhandledRejection', error => {
   logger.error('Unhandled promise rejection:', error);
 });
 
-process.on('SIGINT', () => {
-  logger.info('Shutting down bot...');
+process.on('SIGINT', async () => {
+  if (global.bot) {
+    await global.bot.shutdown();
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  if (global.bot) {
+    await global.bot.shutdown();
+  }
   process.exit(0);
 });
 
 // Start the bot
 const bot = new AccountabilityBot();
+global.bot = bot; // For shutdown handling
 bot.start();
