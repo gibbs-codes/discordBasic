@@ -1,21 +1,28 @@
 {
-  "name": "dicordcoach-bot",
+  "name": "discord-llm-workspace",
   "version": "1.0.0",
-  "description": "Accountability coach Discord bot with financial incentives and punishment system",
+  "description": "Multi-channel Discord LLM workspace for technical work, planning, and assistance",
   "main": "src/bot.js",
   "type": "module",
   "scripts": {
     "start": "node src/bot.js",
     "dev": "nodemon src/bot.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node scripts/test-integration.js",
+    "test:health": "node -e \"import('./scripts/test-integration.js').then(m => m.quickHealthCheck())\"",
+    "migrate": "node scripts/migrate-database.js",
+    "setup": "npm install && npm run migrate",
+    "deploy": "npm run test && npm start",
+    "dev:test": "npm run test:health && npm run dev"
   },
   "keywords": [
     "discord",
     "bot",
-    "accountability",
-    "fitness",
-    "coaching",
-    "notion"
+    "llm",
+    "coding",
+    "technical",
+    "workspace",
+    "planning",
+    "analysis"
   ],
   "author": "Your Name",
   "license": "MIT",

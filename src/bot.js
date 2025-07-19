@@ -1,14 +1,13 @@
 // src/bot.js - Main Discord Bot Entry Point
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { config } from 'dotenv';
 import { MessageHandler } from './handlers/messageHandler.js';
-import { SchedulerService } from './services/SchedulerService.js';
-import { WebhookServer } from './services/webhookServer.js';
+import { AdminCommandService } from './services/AdminCommandService.js';
 import { logger } from './utils/logger.js';
 
 config();
 
-class AccountabilityBot {
+class LLMWorkspaceBot {
   constructor() {
     this.client = new Client({
       intents: [
@@ -20,21 +19,24 @@ class AccountabilityBot {
     });
 
     this.messageHandler = new MessageHandler();
-    this.scheduler = new SchedulerService();
-    this.webhookServer = new WebhookServer(this.client);
+    this.adminCommandService = new AdminCommandService();
     
     this.setupEventListeners();
   }
 
   setupEventListeners() {
     this.client.once('ready', async () => {
-      logger.info(`🤖 ${this.client.user.tag} is online and ready to dominate!`);
+      logger.info(`🤖 ${this.client.user.tag} is online and ready for technical work!`);
       
-      // Start services
-      this.scheduler.startReconciliationSchedule(this.client);
-      await this.webhookServer.start();
+      // Register slash commands
+      await this.registerSlashCommands();
       
-      logger.info('✅ All services started successfully');
+      // Validate channel setup
+      this.client.guilds.cache.forEach(guild => {
+        this.messageHandler.validateChannelSetup(guild);
+      });
+      
+      logger.info('✅ LLM Workspace Bot started successfully');
     });
 
     this.client.on('messageCreate', async (message) => {
@@ -47,14 +49,41 @@ class AccountabilityBot {
       await this.messageHandler.handleReaction(reaction, user);
     });
 
+    this.client.on('interactionCreate', async (interaction) => {
+      if (interaction.isCommand()) {
+        await this.adminCommandService.handleSlashCommand(interaction);
+      } else if (interaction.isButton()) {
+        await this.adminCommandService.handleButtonInteraction(interaction);
+      }
+    });
+
     this.client.on('error', (error) => {
       logger.error('Discord client error:', error);
     });
   }
 
+  async registerSlashCommands() {
+    try {
+      const commands = this.adminCommandService.getSlashCommands();
+      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+      logger.info('Started refreshing application (/) commands.');
+
+      // Register commands globally
+      await rest.put(
+        Routes.applicationCommands(this.client.user.id),
+        { body: commands }
+      );
+
+      logger.info('Successfully reloaded application (/) commands.');
+    } catch (error) {
+      logger.error('Error registering slash commands:', error);
+    }
+  }
+
   async start() {
     try {
-      logger.info('🚀 Starting accountability coach bot...');
+      logger.info('🚀 Starting LLM Workspace Bot...');
       await this.client.login(process.env.DISCORD_TOKEN);
     } catch (error) {
       logger.error('Failed to start bot:', error);
@@ -64,10 +93,6 @@ class AccountabilityBot {
 
   async shutdown() {
     logger.info('🛑 Shutting down bot...');
-    
-    // Stop services
-    this.scheduler.stopScheduler();
-    await this.webhookServer.stop();
     
     // Logout from Discord
     await this.client.destroy();
@@ -96,6 +121,6 @@ process.on('SIGTERM', async () => {
 });
 
 // Start the bot
-const bot = new AccountabilityBot();
+const bot = new LLMWorkspaceBot();
 global.bot = bot; // For shutdown handling
 bot.start();

@@ -1,15 +1,18 @@
-// src/services/llm/LLMService.js - Enhanced LLM with Memory Integration
+// src/services/llm/LLMService.js - Enhanced LLM with Dynamic Channel Configuration
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { OllamaProvider } from './OllamaProvider.js';
-import { getSystemPrompts } from './prompts.js';
+import { getSystemPrompts, getChannelConfig } from './prompts.js';
+import { ChannelConfigService } from '../ChannelConfigService.js';
 import { logger } from '../../utils/logger.js';
 
 export class LLMService {
   constructor() {
-    this.provider = this.initializeProvider();
+    this.providers = new Map(); // Cache providers by configuration
+    this.channelConfigService = new ChannelConfigService();
+    this.defaultProvider = this.initializeDefaultProvider();
   }
 
-  initializeProvider() {
+  initializeDefaultProvider() {
     const providerType = process.env.LLM_PROVIDER || 'openai';
     
     if (providerType === 'openai') {
@@ -27,14 +30,57 @@ export class LLMService {
     }
   }
 
+  // Get or create provider for specific configuration
+  async getProviderForChannel(channelType, guildId = null) {
+    const llmConfig = await this.channelConfigService.getLLMConfig(channelType, guildId);
+    const configKey = `${llmConfig.provider}_${llmConfig.model}`;
+    
+    // Return cached provider if available
+    if (this.providers.has(configKey)) {
+      return this.providers.get(configKey);
+    }
+    
+    // Create new provider based on configuration
+    let provider;
+    
+    try {
+      if (llmConfig.provider === 'openai') {
+        provider = new OpenAIProvider({
+          apiKey: process.env.OPENAI_API_KEY,
+          model: llmConfig.model
+        });
+      } else if (llmConfig.provider === 'ollama') {
+        provider = new OllamaProvider({
+          url: process.env.OLLAMA_URL || 'http://localhost:11434',
+          model: llmConfig.model
+        });
+      } else if (llmConfig.provider === 'anthropic') {
+        // Add Anthropic provider support if needed
+        throw new Error('Anthropic provider not yet implemented');
+      } else {
+        logger.warn(`Unknown provider ${llmConfig.provider}, falling back to default`);
+        provider = this.defaultProvider;
+      }
+      
+      // Cache the provider
+      this.providers.set(configKey, provider);
+      return provider;
+      
+    } catch (error) {
+      logger.error(`Error creating provider for ${channelType}:`, error);
+      return this.defaultProvider;
+    }
+  }
+
   async generateResponse(context) {
     try {
-      const systemPrompt = this.buildSystemPrompt(context);
+      const provider = await this.getProviderForChannel(context.channelType, context.guildId);
+      const systemPrompt = await this.buildSystemPrompt(context);
       const userPrompt = this.buildUserPrompt(context);
       
-      logger.info(`Generating response for ${context.channelType} channel`);
+      logger.info(`Generating response for ${context.channelType} channel using ${provider.constructor.name}`);
       
-      const response = await this.provider.generateResponse(systemPrompt, userPrompt);
+      const response = await provider.generateResponse(systemPrompt, userPrompt);
       
       return response.trim();
       
@@ -44,29 +90,34 @@ export class LLMService {
     }
   }
 
-  async generateReconciliationLecture(reconciliationData) {
-    try {
-      const systemPrompt = getSystemPrompts().reconciliation;
-      const dataPrompt = this.buildReconciliationPrompt(reconciliationData);
-      
-      logger.info('Generating reconciliation lecture');
-      
-      const response = await this.provider.generateResponse(systemPrompt, dataPrompt);
-      
-      return response.trim();
-      
-    } catch (error) {
-      logger.error('Reconciliation lecture error:', error);
-      return "Your reconciliation failed spectacularly. Even your technology is disappointing. Check the logs and try again.";
-    }
+  // Get configuration for admin commands
+  async getConfiguration(guildId = null) {
+    const channelConfigs = await this.channelConfigService.getAllChannelConfigs(guildId);
+    const stats = await this.channelConfigService.getConfigurationStats();
+    
+    return {
+      defaultProvider: process.env.LLM_PROVIDER || 'openai',
+      defaultModel: process.env.LLM_MODEL || 'gpt-4',
+      channelConfigs: channelConfigs.map(config => ({
+        channelType: config.channelType,
+        name: config.name,
+        provider: config.llmConfig.provider,
+        model: config.llmConfig.model,
+        temperature: config.llmConfig.temperature,
+        isActive: config.isActive
+      })),
+      statistics: stats
+    };
   }
 
-  buildSystemPrompt(context) {
-    const basePrompt = getSystemPrompts()[context.channelType] || getSystemPrompts().general;
+  async buildSystemPrompt(context) {
+    // Get channel-specific system prompt from configuration
+    const llmConfig = await this.channelConfigService.getLLMConfig(context.channelType, context.guildId);
+    const basePrompt = llmConfig.systemPrompt || getSystemPrompts()[context.channelType] || getSystemPrompts().general;
     
     // Add memory context to make the AI more aware of patterns
     if (context.memoryContext?.summary) {
-      return `${basePrompt}\n\n**IMPORTANT MEMORY CONTEXT:**\n${context.memoryContext.summary}\n\nUse this context to call out patterns, reference past commitments, and hold the user accountable for previous behavior. Be specific about their history when relevant.`;
+      return `${basePrompt}\n\n**IMPORTANT MEMORY CONTEXT:**\n${context.memoryContext.summary}\n\nUse this context to understand user patterns, reference past interactions, and provide contextually relevant assistance. Be specific about their history when it helps provide better guidance.`;
     }
     
     return basePrompt;
@@ -99,75 +150,53 @@ export class LLMService {
     return prompt;
   }
 
-  buildReconciliationPrompt(reconciliationData) {
-    const results = reconciliationData.results || reconciliationData;
-    
-    let prompt = `Today's reconciliation data:\n`;
-    prompt += `Date: ${results.date}\n`;
-    prompt += `Summary: ${results.summary}\n\n`;
-    
-    // Financial details
-    if (results.uber_earnings_processed) {
-      prompt += `Uber earnings processed: $${results.uber_earnings_processed}\n`;
-    }
-    
-    if (results.total_bonus_amount) {
-      prompt += `Total bonuses earned: $${results.total_bonus_amount}\n`;
-    }
-    
-    // Violations and punishments
-    if (results.new_punishments?.length > 0) {
-      prompt += `New punishments assigned: ${results.new_punishments.length}\n`;
-      results.new_punishments.forEach(punishment => {
-        prompt += `- ${punishment.type}: ${punishment.reason}\n`;
-      });
-    }
-    
-    // Debt updates
-    if (results.debt_updates?.length > 0) {
-      prompt += `Debt updates:\n`;
-      results.debt_updates.forEach(debt => {
-        prompt += `- $${debt.current_amount} (was $${debt.original_amount})\n`;
-      });
-    }
-    
-    // Bonuses earned
-    if (results.new_bonuses?.length > 0) {
-      prompt += `Bonuses earned:\n`;
-      results.new_bonuses.forEach(bonus => {
-        prompt += `- ${bonus.type}: $${bonus.amount}\n`;
-      });
-    }
-    
-    prompt += `\nAnalyze this data and deliver your coaching verdict. Be specific about performance, consequences, and what needs to improve. Use your commanding personality to address their progress.`;
-    
-    return prompt;
-  }
 
   extractKeyInsights(memoryContext) {
     const insights = [];
     
-    // Excuse patterns
-    if (memoryContext.discordPatterns?.excusePatterns?.length > 2) {
-      insights.push(`You've made ${memoryContext.discordPatterns.excusePatterns.length} excuses recently`);
+    // Programming language preferences
+    if (memoryContext.discordPatterns?.preferredLanguages?.length > 0) {
+      insights.push(`Uses ${memoryContext.discordPatterns.preferredLanguages.slice(0, 2).join(', ')}`);
     }
     
-    // Begging frequency
-    if (memoryContext.discordPatterns?.beggingFrequency > 3) {
-      insights.push(`Excessive begging (${memoryContext.discordPatterns.beggingFrequency} requests)`);
+    // Framework preferences
+    if (memoryContext.discordPatterns?.preferredFrameworks?.length > 0) {
+      insights.push(`Works with ${memoryContext.discordPatterns.preferredFrameworks.slice(0, 2).join(', ')}`);
     }
     
-    // Mood patterns
-    if (memoryContext.morningInsights?.length > 0) {
-      const latestMood = memoryContext.morningInsights[0].mood;
-      if (latestMood && latestMood !== 'Unknown') {
-        insights.push(`Recent mood: ${latestMood}`);
+    // Active projects
+    if (memoryContext.projectContexts?.length > 0) {
+      const activeProjects = memoryContext.projectContexts.slice(0, 2).map(p => p.name);
+      insights.push(`Active projects: ${activeProjects.join(', ')}`);
+    }
+    
+    // Skill development focus
+    if (memoryContext.skillPatterns?.length > 0) {
+      const topSkills = memoryContext.skillPatterns.slice(0, 2).map(s => s.name);
+      insights.push(`Developing: ${topSkills.join(', ')}`);
+    }
+    
+    // Question patterns
+    if (memoryContext.discordPatterns?.questionTypes) {
+      const topQuestionType = Object.entries(memoryContext.discordPatterns.questionTypes)
+        .sort(([,a], [,b]) => b - a)[0]?.[0];
+      if (topQuestionType && topQuestionType !== 'general') {
+        insights.push(`Often asks about ${topQuestionType.replace('-', ' ')}`);
       }
     }
     
-    // Behavioral patterns
-    if (memoryContext.behaviorPatterns?.channelAvoidance?.proofAvoidance) {
-      insights.push('Avoiding proof submissions');
+    // Complexity preference
+    if (memoryContext.discordPatterns?.complexityDistribution) {
+      const total = Object.values(memoryContext.discordPatterns.complexityDistribution).reduce((a, b) => a + b, 0);
+      const complexRatio = memoryContext.discordPatterns.complexityDistribution.complex / total;
+      if (complexRatio > 0.4) {
+        insights.push('Prefers complex problems');
+      }
+    }
+    
+    // Working patterns
+    if (memoryContext.workflowPatterns?.workingHours?.preferredWorkingTime) {
+      insights.push(`${memoryContext.workflowPatterns.workingHours.preferredWorkingTime}`);
     }
     
     return insights.join(', ');
@@ -175,30 +204,68 @@ export class LLMService {
 
   getFallbackResponse(channelType) {
     const fallbacks = {
-      general: "My AI is down, but my disappointment in you remains constant. Try again later.",
-      begging: "The answer is no. My systems might be down but my standards aren't.",
-      proof: "I can't process this right now, but I'm sure it's mediocre anyway.",
-      reviews: "System error. Your performance is probably disappointing as usual.",
-      punishments: "SYSTEM ERROR: Punishment assignment failed. Consider yourself lucky... for now."
+      general: "⚠️ LLM service temporarily unavailable. Please try again in a moment.",
+      coding: "🔧 Code analysis service is down. Please retry your request.",
+      projects: "📋 Project planning service is temporarily unavailable.",
+      planning: "📅 Planning assistance is temporarily down. Please try again.",
+      analysis: "📊 Analysis service is currently unavailable.",
+      admin: "⚙️ Admin functions are temporarily unavailable."
     };
 
     return fallbacks[channelType] || fallbacks.general;
   }
 
-  async testConnection() {
+  async testConnection(channelType = 'general', guildId = null) {
     try {
+      const provider = await this.getProviderForChannel(channelType, guildId);
+      const llmConfig = await this.channelConfigService.getLLMConfig(channelType, guildId);
+      
       const testResponse = await this.generateResponse({
         message: "Test connection",
-        channelType: "general",
+        channelType,
+        guildId,
         username: "System",
         memoryContext: { summary: "Test mode" }
       });
       
-      logger.info(`✅ LLM ${process.env.LLM_PROVIDER} connection successful`);
-      return true;
+      logger.info(`✅ LLM connection successful for ${channelType} (${llmConfig.provider}/${llmConfig.model})`);
+      return { success: true, provider: llmConfig.provider, model: llmConfig.model };
     } catch (error) {
-      logger.error(`❌ LLM ${process.env.LLM_PROVIDER} connection failed:`, error);
+      logger.error(`❌ LLM connection failed for ${channelType}:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Update channel configuration
+  async updateChannelConfig(channelType, updates, guildId = null) {
+    try {
+      const success = await this.channelConfigService.updateChannelConfig(channelType, updates, guildId);
+      
+      if (success) {
+        // Clear provider cache to force recreation with new config
+        this.providers.clear();
+        logger.info(`✅ Updated LLM configuration for ${channelType}`);
+      }
+      
+      return success;
+    } catch (error) {
+      logger.error(`Error updating channel config for ${channelType}:`, error);
       return false;
     }
+  }
+
+  // Get channel configuration
+  async getChannelConfig(channelType, guildId = null) {
+    return await this.channelConfigService.getChannelConfig(channelType, guildId);
+  }
+
+  // Get all channel configurations
+  async getAllChannelConfigs(guildId = null) {
+    return await this.channelConfigService.getAllChannelConfigs(guildId);
+  }
+
+  // Create guild-specific configuration
+  async createGuildConfig(guildId, channelType, config) {
+    return await this.channelConfigService.createGuildConfig(guildId, channelType, config);
   }
 }
