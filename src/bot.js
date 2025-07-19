@@ -4,19 +4,14 @@ import { config } from 'dotenv';
 import { MessageHandler } from './handlers/messageHandler.js';
 import { AdminCommandService } from './services/AdminCommandService.js';
 import { logger } from './utils/logger.js';
+import { getDiscordIntents, checkIntentAvailability, logIntentStatus } from './utils/intents.js';
 
 config();
 
 class LLMWorkspaceBot {
   constructor() {
     this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,  // Enable this in Discord Developer Portal
-        GatewayIntentBits.GuildMembers,    // Enable this in Discord Developer Portal  
-        GatewayIntentBits.GuildMessageReactions
-      ]
+      intents: getDiscordIntents()
     });
 
     this.messageHandler = new MessageHandler();
@@ -29,17 +24,9 @@ class LLMWorkspaceBot {
     this.client.once('ready', async () => {
       logger.info(`🤖 ${this.client.user.tag} is online and ready for technical work!`);
       
-      // Check for missing privileged intents
-      const hasMessageContent = this.client.options.intents.has('MessageContent');
-      const hasGuildMembers = this.client.options.intents.has('GuildMembers');
-      
-      if (!hasMessageContent || !hasGuildMembers) {
-        logger.warn('⚠️ MISSING PRIVILEGED INTENTS:');
-        if (!hasMessageContent) logger.warn('  - MessageContent Intent: Bot cannot read message content');
-        if (!hasGuildMembers) logger.warn('  - GuildMembers Intent: Admin permission checking limited');
-        logger.warn('  - Enable these in Discord Developer Portal for full functionality');
-        logger.warn('  - For now, use SLASH COMMANDS: /help, /health, /setmodel, etc.');
-      }
+      // Check intent availability and provide guidance
+      const intentStatus = checkIntentAvailability(this.client);
+      logIntentStatus(intentStatus);
       
       // Register slash commands
       await this.registerSlashCommands();
@@ -50,7 +37,7 @@ class LLMWorkspaceBot {
       });
       
       logger.info('✅ LLM Workspace Bot started successfully');
-      if (!hasMessageContent) {
+      if (!intentStatus.hasAllPrivileged) {
         logger.info('💡 Use slash commands for full functionality until intents are enabled');
       }
     });
