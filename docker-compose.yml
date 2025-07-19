@@ -1,14 +1,17 @@
+version: '3.8'
+
 services:
-  app:
+  discord-llm-workspace:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: accountability-discord-bot-production
+      dockerfile: dockerfile
+    container_name: discord-llm-workspace-bot
     ports:
-      - "3004:3004"
+      - "3003:3003"
     environment:
       - NODE_ENV=production
-      - WEBHOOK_PORT=3004
+      - LOG_LEVEL=info
+      - PORT=3003
     env_file:
       - .env
     restart: unless-stopped
@@ -17,15 +20,48 @@ services:
     volumes:
       - ./logs:/usr/src/app/logs:rw
       - ./data:/usr/src/app/data:rw
+      - ./backups:/usr/src/app/backups:rw
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      test: ["CMD", "node", "-e", "import('./scripts/test-integration.js').then(m => m.quickHealthCheck().then(r => process.exit(r ? 0 : 1)))"]
+      interval: 45s
+      timeout: 15s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      - mongodb
+    labels:
+      - "app=discord-llm-workspace"
+      - "environment=production"
+      - "version=2.0.0"
+
+  mongodb:
+    image: mongo:7.0-jammy
+    container_name: discord-workspace-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=technical_workspace
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    restart: unless-stopped
+    networks:
+      - gibbs-apps
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
     labels:
-      - "app=accountability-discord-bot"
+      - "app=discord-llm-workspace-db"
       - "environment=production"
+
+volumes:
+  mongodb_data:
+    driver: local
+    labels:
+      - "app=discord-llm-workspace"
 
 networks:
   gibbs-apps:
