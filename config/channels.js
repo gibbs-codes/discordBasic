@@ -3,42 +3,42 @@ export const channelConfig = {
   coding: {
     keywords: ['coding', 'dev', 'development', 'code', 'programming'],
     description: 'Software development help and code reviews',
-    reactions: ['=', '', 'L', '=�', '=''],
+    reactions: ['✅', '❌', '🔧', '💡', '🚀'],
     allowFiles: true,
     threadSupport: true
   },
   general: {
     keywords: ['general', 'chat', 'main', 'random'],
     description: 'Quick Q&A and random questions',
-    reactions: ['=M', '=N', '>', '=�'],
+    reactions: ['👍', '👎', '❓', '💭'],
     allowFiles: false,
     threadSupport: false
   },
   projects: {
     keywords: ['projects', 'project', 'ideas', 'brainstorm'],
     description: 'Project idea exploration and planning',
-    reactions: ['=�', '=�', 'P', '<�', '=�'],
+    reactions: ['🚀', '💡', '📋', '⭐', '🎯'],
     allowFiles: true,
     threadSupport: true
   },
   planning: {
     keywords: ['planning', 'tasks', 'workflow', 'productivity', 'todo'],
     description: 'Daily task prioritization and workflow',
-    reactions: ['=�', '', '=', '�', '=�'],
+    reactions: ['📅', '✅', '📝', '⚡', '🎯'],
     allowFiles: false,
     threadSupport: true
   },
   analysis: {
     keywords: ['analysis', 'data', 'analytics', 'research', 'insights'],
     description: 'Data analysis and reasoning',
-    reactions: ['=�', '=,', '=�', '=�', '>�'],
+    reactions: ['📊', '🔍', '📈', '🧠', '📋'],
     allowFiles: true,
     threadSupport: true
   },
   admin: {
     keywords: ['admin', 'config', 'settings', 'bot'],
     description: 'Bot configuration commands',
-    reactions: ['�', '='', '', 'L'],
+    reactions: ['⚙️', '✅', '❌', '🔧'],
     allowFiles: false,
     threadSupport: false,
     adminOnly: true

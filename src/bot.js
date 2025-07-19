@@ -13,8 +13,9 @@ class LLMWorkspaceBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.MessageContent,  // Enable this in Discord Developer Portal
+        GatewayIntentBits.GuildMembers,    // Enable this in Discord Developer Portal  
+        GatewayIntentBits.GuildMessageReactions
       ]
     });
 
@@ -28,6 +29,18 @@ class LLMWorkspaceBot {
     this.client.once('ready', async () => {
       logger.info(`🤖 ${this.client.user.tag} is online and ready for technical work!`);
       
+      // Check for missing privileged intents
+      const hasMessageContent = this.client.options.intents.has('MessageContent');
+      const hasGuildMembers = this.client.options.intents.has('GuildMembers');
+      
+      if (!hasMessageContent || !hasGuildMembers) {
+        logger.warn('⚠️ MISSING PRIVILEGED INTENTS:');
+        if (!hasMessageContent) logger.warn('  - MessageContent Intent: Bot cannot read message content');
+        if (!hasGuildMembers) logger.warn('  - GuildMembers Intent: Admin permission checking limited');
+        logger.warn('  - Enable these in Discord Developer Portal for full functionality');
+        logger.warn('  - For now, use SLASH COMMANDS: /help, /health, /setmodel, etc.');
+      }
+      
       // Register slash commands
       await this.registerSlashCommands();
       
@@ -37,6 +50,9 @@ class LLMWorkspaceBot {
       });
       
       logger.info('✅ LLM Workspace Bot started successfully');
+      if (!hasMessageContent) {
+        logger.info('💡 Use slash commands for full functionality until intents are enabled');
+      }
     });
 
     this.client.on('messageCreate', async (message) => {

@@ -14,6 +14,12 @@ export class MessageHandler {
 
   async handleMessage(message) {
     try {
+      // Skip if we don't have message content (missing privileged intent)
+      if (!message.content) {
+        logger.warn('Cannot read message content - MessageContent intent not enabled');
+        return;
+      }
+
       const channelType = this.channelHandler.getChannelType(message.channel.name);
       
       logger.info(`Message in ${channelType}: ${message.content.substring(0, 50)}...`);
@@ -24,9 +30,11 @@ export class MessageHandler {
         return;
       }
 
-      // Check admin-only channel access
-      if (channelType === 'admin' && !hasAdminAccess(message.member)) {
-        await message.reply('⚠️ This channel is restricted to administrators.');
+      // Check admin-only channel access (simplified without member permissions)
+      if (channelType === 'admin') {
+        // Without GuildMembers intent, we can't check permissions properly
+        // So we'll rely on Discord's built-in permissions for slash commands
+        await message.reply('⚠️ Please use slash commands for admin functions: `/help` to see available commands.');
         return;
       }
 
