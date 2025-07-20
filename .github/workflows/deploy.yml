@@ -93,10 +93,24 @@ jobs:
         echo "Waiting for MongoDB to be ready..."
         sleep 10
         
-        # Test connection
+        # Test connection (macOS compatible) - use the actual container name
         echo "Testing Docker MongoDB connection..."
-        timeout 30 bash -c 'until docker exec mongodb mongosh --username devuser --password devpass --authenticationDatabase admin --eval "db.adminCommand(\"ping\")" > /dev/null 2>&1; do sleep 2; done'
-        echo "✅ Docker MongoDB is ready"
+        MONGO_CONTAINER=$(docker ps --format "table {{.Names}}" | grep mongo | head -1)
+        echo "Using MongoDB container: $MONGO_CONTAINER"
+        
+        for i in {1..15}; do
+          if docker exec $MONGO_CONTAINER mongosh --username devuser --password devpass --authenticationDatabase admin --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+            echo "✅ Docker MongoDB is ready"
+            break
+          fi
+          echo "Waiting for MongoDB... attempt $i/15"
+          sleep 2
+          if [ $i -eq 15 ]; then
+            echo "❌ MongoDB failed to start after 30 seconds"
+            docker logs $MONGO_CONTAINER
+            exit 1
+          fi
+        done
         
     - name: Run database migration
       run: |
