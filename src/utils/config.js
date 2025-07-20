@@ -1,5 +1,6 @@
 // src/utils/config.js - Environment Configuration Validation
 import { logger } from './logger.js';
+import { getMongoUri, getEnvironmentInfo } from './mongoUri.js';
 
 class ConfigValidator {
   constructor() {
@@ -62,16 +63,34 @@ class ConfigValidator {
   }
 
   validateMongoConfig() {
-    const mongoUri = process.env.MONGO_URI;
+    const baseMongoUri = process.env.MONGO_URI;
     
-    if (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://')) {
-      logger.error('❌ MONGO_URI must start with mongodb:// or mongodb+srv://');
+    if (!baseMongoUri) {
+      logger.error('❌ MONGO_URI environment variable is required');
       process.exit(1);
     }
+    
+    try {
+      const resolvedUri = getMongoUri();
+      const envInfo = getEnvironmentInfo();
+      
+      logger.info('🔍 MongoDB Configuration:');
+      logger.info(`   Environment: ${envInfo.nodeEnv} (Docker: ${envInfo.isDocker})`);
+      logger.info(`   Resolved URI: ${this.maskSensitive(resolvedUri)}`);
+      
+      // Validate the resolved URI format
+      if (!resolvedUri.startsWith('mongodb://') && !resolvedUri.startsWith('mongodb+srv://')) {
+        logger.error('❌ Resolved MongoDB URI must start with mongodb:// or mongodb+srv://');
+        process.exit(1);
+      }
 
-    // Check if using default MongoDB without authentication (development)
-    if (mongoUri === 'mongodb://localhost:27017' || mongoUri.includes('localhost:27017')) {
-      logger.warn('⚠️ Using local MongoDB without authentication. Fine for development.');
+      // Check if using local MongoDB without authentication (development)
+      if (resolvedUri.includes('localhost:27017') || resolvedUri.includes('host.docker.internal:27017')) {
+        logger.warn('⚠️ Using MongoDB without authentication. Fine for development.');
+      }
+    } catch (error) {
+      logger.error('❌ MongoDB configuration error:', error.message);
+      process.exit(1);
     }
   }
 
@@ -83,7 +102,7 @@ class ConfigValidator {
         hasApiKey: process.env.LLM_PROVIDER === 'ollama' ? 'N/A' : !!process.env.OPENAI_API_KEY
       },
       database: {
-        mongo: this.maskSensitive(process.env.MONGO_URI)
+        mongo: this.maskSensitive(getMongoUri())
       },
       services: {
         reconciliationApi: process.env.RECONCILIATION_API_URL || 'http://localhost:3000'
@@ -128,7 +147,7 @@ class ConfigValidator {
         ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434'
       },
       database: {
-        mongoUri: process.env.MONGO_URI
+        mongoUri: getMongoUri()
       },
       services: {
         reconciliationApiUrl: process.env.RECONCILIATION_API_URL || 'http://localhost:3000'

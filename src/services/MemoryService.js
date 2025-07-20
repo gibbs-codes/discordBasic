@@ -1,10 +1,11 @@
 // src/services/MemoryService.js - Technical Memory & Context Management
 import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger.js';
+import { getMongoUri } from '../utils/mongoUri.js';
 
 export class MemoryService {
   constructor() {
-    this.client = new MongoClient(process.env.MONGO_URI);
+    this.client = new MongoClient(getMongoUri());
     this.db = null;
     this.technicalLogs = null; // Technical work sessions and insights
     this.discordLogs = null;   // Discord interactions

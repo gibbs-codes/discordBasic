@@ -4,12 +4,13 @@
 import { MongoClient } from 'mongodb';
 import { config } from 'dotenv';
 import { logger } from '../src/utils/logger.js';
+import { getMongoUri } from '../src/utils/mongoUri.js';
 
 config();
 
 class DatabaseMigration {
   constructor() {
-    this.client = new MongoClient(process.env.MONGO_URI);
+    this.client = new MongoClient(getMongoUri());
     this.db = null;
   }
 

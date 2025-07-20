@@ -1,10 +1,11 @@
 // src/services/ChannelConfigService.js - Dynamic Channel Configuration Management
 import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger.js';
+import { getMongoUri } from '../utils/mongoUri.js';
 
 export class ChannelConfigService {
   constructor() {
-    this.client = new MongoClient(process.env.MONGO_URI);
+    this.client = new MongoClient(getMongoUri());
     this.db = null;
     this.channelConfigs = null;
     this.initialized = false;
