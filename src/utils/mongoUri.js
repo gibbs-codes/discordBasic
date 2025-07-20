@@ -1,5 +1,6 @@
 // src/utils/mongoUri.js - Environment-aware MongoDB URI selection
 import { logger } from './logger.js';
+import fs from 'fs';
 
 /**
  * Get the appropriate MongoDB URI based on the current environment
@@ -47,7 +48,6 @@ export function getMongoUri() {
 function isRunningInDocker() {
   try {
     // Check for .dockerenv file (Docker creates this)
-    const fs = await import('fs');
     if (fs.existsSync('/.dockerenv')) {
       return true;
     }
