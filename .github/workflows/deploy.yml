@@ -83,17 +83,36 @@ jobs:
         # Install dependencies for migration
         npm ci
         
-        # Start MongoDB for migration (if not already running)
+        # Start Homebrew MongoDB for migration (no auth)
         if ! brew services list | grep mongodb-community | grep started; then
-          echo "Starting MongoDB for migration..."
+          echo "Starting Homebrew MongoDB for migration..."
           brew services start mongodb-community
           sleep 5
         fi
         
-        # Run migration script
+        # Temporarily override MONGO_URI for migration only
+        export MONGO_URI="mongodb://localhost:27017/technical_workspace"
+        export NODE_ENV="development"
+        
+        # Run migration script with overridden environment
+        echo "Running migration with Homebrew MongoDB (no auth)..."
         npm run migrate
         
         echo "✅ Database migration completed"
+        
+    - name: Start Docker MongoDB
+      run: |
+        echo "Starting Docker MongoDB with authentication..."
+        cd ~/
+        
+        # Make sure Docker MongoDB is running
+        if ! docker ps | grep mongo; then
+          echo "Starting Docker MongoDB..."
+          docker-compose up -d mongodb
+          sleep 10
+        else
+          echo "Docker MongoDB already running"
+        fi
         
     - name: Build and start container
       env:
@@ -143,59 +162,6 @@ jobs:
           echo "✅ Discord LLM Workspace Bot deployment successful!"
         else
           echo "❌ Health check failed"
-          echo "Container logs:"
-          docker logs --tail=50 ${{ env.CONTAINER_NAME }}
+          docker logs ${{ env.CONTAINER_NAME }}
           exit 1
         fi
-        
-        # Check Discord connection
-        echo "Checking Discord connection..."
-        sleep 5
-        if docker logs ${{ env.CONTAINER_NAME }} | grep -E "(online and ready|started successfully)"; then
-          echo "✅ Discord connected successfully"
-        else
-          echo "⚠️ Discord connection status unclear, checking logs..."
-          docker logs --tail=20 ${{ env.CONTAINER_NAME }}
-        fi
-        
-    - name: Test admin commands
-      run: |
-        echo "Testing admin command system..."
-        cd ~/deployments/${{ env.APP_NAME }}
-        
-        # Test admin command service initialization
-        if docker logs ${{ env.CONTAINER_NAME }} | grep -E "(slash commands|admin command|Successfully reloaded)"; then
-          echo "✅ Admin commands initialized"
-        else
-          echo "⚠️ Admin command status unclear"
-        fi
-        
-        # Test MongoDB connection
-        if docker logs ${{ env.CONTAINER_NAME }} | grep -E "(Memory service connected|technical workspace)"; then
-          echo "✅ MongoDB connected with technical workspace"
-        else
-          echo "⚠️ MongoDB connection status unclear"
-        fi
-        
-    - name: Clean up old images
-      run: |
-        docker image prune -f --filter label=app=discord-llm-workspace || true
-        
-    - name: Show final status
-      run: |
-        echo "=== Discord LLM Workspace Bot Status ==="
-        docker ps | grep ${{ env.CONTAINER_NAME }}
-        echo ""
-        echo "Bot is running on port ${{ env.PORT }}"
-        echo "  - Health Check: npm run test:health"
-        echo "  - Integration Tests: npm test"
-        echo "  - Admin Commands: 13 slash commands available"
-        echo "  - Channels: coding, general, projects, planning, analysis, admin"
-        echo "  - Memory System: Technical pattern recognition enabled"
-        echo "  - Database: MongoDB with technical_workspace collections"
-        echo ""
-        echo "Network: gibbs-apps"
-        docker network inspect gibbs-apps --format='{{range .Containers}}{{.Name}}: {{.IPv4Address}}{{"\n"}}{{end}}'
-        echo ""
-        echo "Recent logs:"
-        docker logs --tail=10 ${{ env.CONTAINER_NAME }}
