@@ -15,6 +15,17 @@ export function getMongoUri() {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
+  // Check if we're in a GitHub Actions or CI environment (build time)
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  
+  // If MONGO_URI contains host.docker.internal but we're in CI/build environment, use localhost instead
+  if (baseUri.includes('host.docker.internal') && isCI) {
+    const dbName = extractDatabaseName(baseUri);
+    const ciUri = `mongodb://localhost:27017/${dbName}`;
+    logger.info(`🔧 CI environment detected, using localhost instead of host.docker.internal: ${maskUri(ciUri)}`);
+    return ciUri;
+  }
+  
   // If MONGO_URI is a complete URI with a specific host, use it as-is
   if (baseUri.includes('://') && (baseUri.includes('host.docker.internal') || baseUri.includes('localhost') || baseUri.includes('mongodb://mongodb:') || baseUri.includes('mongodb+srv://'))) {
     logger.info(`📋 Using explicit MONGO_URI: ${maskUri(baseUri)}`);
@@ -155,6 +166,7 @@ export function getEnvironmentInfo() {
     nodeEnv: process.env.NODE_ENV || 'development',
     dockerEnv: process.env.DOCKER_ENV === 'true',
     isDocker: isRunningInDocker(),
+    isCI: process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true',
     mongoUri: maskUri(process.env.MONGO_URI),
     resolvedUri: maskUri(getMongoUri())
   };
