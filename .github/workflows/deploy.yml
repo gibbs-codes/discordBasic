@@ -83,6 +83,13 @@ jobs:
         # Install dependencies for migration
         npm ci
         
+        # Start MongoDB for migration (if not already running)
+        if ! brew services list | grep mongodb-community | grep started; then
+          echo "Starting MongoDB for migration..."
+          brew services start mongodb-community
+          sleep 5
+        fi
+        
         # Run migration script
         npm run migrate
         

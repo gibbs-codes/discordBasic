@@ -10,8 +10,6 @@ export function getMongoUri() {
   const baseUri = process.env.MONGO_URI;
   const nodeEnv = process.env.NODE_ENV;
   const dockerEnv = process.env.DOCKER_ENV === 'true';
-  const user = process.env.MONGO_USER;
-  const pass = process.env.MONGO_PASS;
 
 
   if (!baseUri) {
@@ -24,14 +22,9 @@ export function getMongoUri() {
   // If MONGO_URI contains host.docker.internal but we're in CI/build environment, use localhost instead
   if (baseUri.includes('host.docker.internal') && isCI) {
     const dbName = extractDatabaseName(baseUri);
-    // Build the CI URI with proper format
-    let ciUri;
-    if (user && pass) {
-      ciUri = `mongodb://${user}:${pass}@localhost:27017/${dbName}`;
-    } else {
-      ciUri = `mongodb://localhost:27017/${dbName}`;
-    }
-    logger.info(`🔧 CI environment detected, using localhost instead of host.docker.internal: ${maskUri(ciUri)}`);
+    // For CI, use simple localhost connection without auth
+    const ciUri = `mongodb://localhost:27017/${dbName}`;
+    logger.info(`🔧 CI environment detected, using localhost without auth: ${maskUri(ciUri)}`);
     return ciUri;
   }
   
