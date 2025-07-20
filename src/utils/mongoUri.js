@@ -15,23 +15,23 @@ export function getMongoUri() {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
-  // If MONGO_URI already contains host.docker.internal or localhost, use it as-is
-  if (baseUri.includes('host.docker.internal') || baseUri.includes('localhost')) {
-    return baseUri;
-  }
-
   // Determine if we're running in Docker
+  const isDockerDetected = isRunningInDocker();
   const isDockerEnvironment = dockerEnv || 
     nodeEnv === 'production' || 
-    isRunningInDocker();
+    isDockerDetected;
 
   // Extract database name from the URI
   const dbName = extractDatabaseName(baseUri);
   
+  // Log environment detection for debugging
+  logger.info(`🔍 Environment detection - DOCKER_ENV: ${dockerEnv}, NODE_ENV: ${nodeEnv}, Docker detected: ${isDockerDetected}, Final decision: ${isDockerEnvironment ? 'Docker' : 'Local'}`);
+  
   if (isDockerEnvironment) {
-    // Use Docker host for container communication
-    const dockerUri = `mongodb://host.docker.internal:27017/${dbName}`;
-    logger.info('🐳 Using Docker MongoDB URI (container environment detected)');
+    // For Docker Compose, use service name; for standalone Docker, use host.docker.internal
+    const mongoHost = process.env.MONGO_HOST || 'mongodb';
+    const dockerUri = `mongodb://${mongoHost}:27017/${dbName}`;
+    logger.info(`🐳 Using Docker MongoDB URI: ${dockerUri} (container environment detected)`);
     return dockerUri;
   } else {
     // Use localhost for local development
@@ -49,19 +49,32 @@ function isRunningInDocker() {
   try {
     // Check for .dockerenv file (Docker creates this)
     if (fs.existsSync('/.dockerenv')) {
+      logger.debug('Docker detected via .dockerenv file');
       return true;
     }
 
     // Check cgroup for docker indicators
     if (fs.existsSync('/proc/1/cgroup')) {
       const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
-      return cgroup.includes('docker') || cgroup.includes('kubepods');
+      const isDocker = cgroup.includes('docker') || cgroup.includes('kubepods') || cgroup.includes('/docker/');
+      if (isDocker) {
+        logger.debug('Docker detected via cgroup');
+      }
+      return isDocker;
+    }
+
+    // Check for common Docker environment variables
+    if (process.env.KUBERNETES_SERVICE_HOST || 
+        process.env.DOCKER_CONTAINER ||
+        process.env.container === 'docker') {
+      logger.debug('Docker detected via environment variables');
+      return true;
     }
 
     return false;
   } catch (error) {
     // If we can't determine, assume local development
-    logger.debug('Could not detect Docker environment, assuming local development');
+    logger.debug('Could not detect Docker environment, assuming local development:', error.message);
     return false;
   }
 }

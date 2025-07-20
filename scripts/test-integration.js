@@ -468,7 +468,7 @@ async function runTests() {
 }
 
 // Export for use in other scripts
-export { IntegrationTester, quickHealthCheck };
+export { IntegrationTester };
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
