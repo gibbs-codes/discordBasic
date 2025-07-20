@@ -15,7 +15,13 @@ export function getMongoUri() {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
-  // Determine if we're running in Docker
+  // If MONGO_URI is a complete URI with a specific host, use it as-is
+  if (baseUri.includes('://') && (baseUri.includes('host.docker.internal') || baseUri.includes('localhost') || baseUri.includes('mongodb://mongodb:') || baseUri.includes('mongodb+srv://'))) {
+    logger.info(`📋 Using explicit MONGO_URI: ${maskUri(baseUri)}`);
+    return baseUri;
+  }
+
+  // Only do smart detection if MONGO_URI doesn't specify a complete connection string
   const isDockerDetected = isRunningInDocker();
   const isDockerEnvironment = dockerEnv || isDockerDetected;
 
