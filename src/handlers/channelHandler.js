@@ -23,14 +23,13 @@ export class ChannelHandler {
       const reactions = await this.channelConfigService.getChannelReactions(channelType, guildId);
       const features = await this.channelConfigService.getChannelFeatures(channelType, guildId);
       
-      // Add standard reactions based on channel configuration
-      if (reactions && reactions.length > 0) {
-        for (const emoji of reactions) {
-          try {
-            await message.react(emoji);
-          } catch (error) {
-            logger.warn(`Failed to add reaction ${emoji}:`, error.message);
-          }
+      // Add a simple acknowledgment reaction if reaction tracking is enabled
+      if (features?.reactionTracking) {
+        try {
+          // Just add a simple thumbs up to acknowledge the message was received
+          await message.react('👍');
+        } catch (error) {
+          logger.warn(`Failed to add acknowledgment reaction:`, error.message);
         }
       }
 
