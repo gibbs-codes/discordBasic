@@ -75,6 +75,29 @@ jobs:
           exit 1
         fi
         
+    - name: Start Docker MongoDB for migration
+      run: |
+        echo "Starting Docker MongoDB for migration..."
+        cd ~/
+        
+        # Ensure Docker MongoDB is running
+        if ! docker ps | grep mongo; then
+          echo "Starting Docker MongoDB..."
+          docker-compose up -d mongodb
+          sleep 15
+        else
+          echo "Docker MongoDB already running"
+        fi
+        
+        # Wait for MongoDB to be ready
+        echo "Waiting for MongoDB to be ready..."
+        sleep 10
+        
+        # Test connection
+        echo "Testing Docker MongoDB connection..."
+        timeout 30 bash -c 'until docker exec mongodb mongosh --username devuser --password devpass --authenticationDatabase admin --eval "db.adminCommand(\"ping\")" > /dev/null 2>&1; do sleep 2; done'
+        echo "✅ Docker MongoDB is ready"
+        
     - name: Run database migration
       run: |
         cd ~/deployments/${{ env.APP_NAME }}
@@ -83,36 +106,14 @@ jobs:
         # Install dependencies for migration
         npm ci
         
-        # Start Homebrew MongoDB for migration (no auth)
-        if ! brew services list | grep mongodb-community | grep started; then
-          echo "Starting Homebrew MongoDB for migration..."
-          brew services start mongodb-community
-          sleep 5
-        fi
-        
-        # Temporarily override MONGO_URI for migration only
-        export MONGO_URI="mongodb://localhost:27017/technical_workspace"
+        # Use Docker MongoDB for migration (connecting from host to Docker container)
+        export MONGO_URI="mongodb://devuser:devpass@localhost:27017/technical_workspace?authSource=admin"
         export NODE_ENV="development"
         
-        # Run migration script with overridden environment
-        echo "Running migration with Homebrew MongoDB (no auth)..."
+        echo "Running migration with Docker MongoDB..."
         npm run migrate
         
         echo "✅ Database migration completed"
-        
-    - name: Start Docker MongoDB
-      run: |
-        echo "Starting Docker MongoDB with authentication..."
-        cd ~/
-        
-        # Make sure Docker MongoDB is running
-        if ! docker ps | grep mongo; then
-          echo "Starting Docker MongoDB..."
-          docker-compose up -d mongodb
-          sleep 10
-        else
-          echo "Docker MongoDB already running"
-        fi
         
     - name: Build and start container
       env:
