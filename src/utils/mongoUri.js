@@ -17,9 +17,7 @@ export function getMongoUri() {
 
   // Determine if we're running in Docker
   const isDockerDetected = isRunningInDocker();
-  const isDockerEnvironment = dockerEnv || 
-    nodeEnv === 'production' || 
-    isDockerDetected;
+  const isDockerEnvironment = dockerEnv || isDockerDetected;
 
   // Extract database name from the URI
   const dbName = extractDatabaseName(baseUri);
