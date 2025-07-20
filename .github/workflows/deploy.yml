@@ -144,7 +144,7 @@ jobs:
         # Build the image
         docker build --no-cache -t discord-llm-workspace:latest .
         
-        # Run the container with shared network
+        # Run the container with shared network and explicit environment variables
         docker run -d \
           --name ${{ env.CONTAINER_NAME }} \
           --restart unless-stopped \
@@ -156,6 +156,8 @@ jobs:
           --env-file .env \
           -e NODE_ENV=production \
           -e PORT=${{ env.PORT }} \
+          -e OLLAMA_URL=http://host.docker.internal:11434 \
+          -e LLM_PROVIDER=ollama \
           discord-llm-workspace:latest
         
     - name: Verify deployment
